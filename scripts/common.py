@@ -38,7 +38,7 @@ ENDPOINTS = [
 
 USER_AGENT = (
     "Mozilla/5.0 (compatible; vpngate-monitor/1.0; "
-    "+https://github.com/g1010yzd10/vpngate-monitor) automated-6-hourly-check"
+    "+https://github.com/onlyactions/vpngate-monitor) automated-daily-check"
 )
 
 CSV_FIELDS = [

@@ -2,7 +2,7 @@ name: VPN Gate Monitor
 
 on:
   schedule:
-    - cron: "23 */6 * * *" # every 6h off-peak: 00:23, 06:23, 12:23, 18:23 UTC (top-of-hour slots get delayed/dropped by Actions congestion)
+    - cron: "23 3 * * *" # daily at 03:23 UTC (off-peak minute — top-of-hour slots get delayed/dropped by Actions congestion)
   workflow_dispatch:
     inputs:
       max_servers:
