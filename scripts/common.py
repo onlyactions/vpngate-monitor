@@ -38,7 +38,7 @@ ENDPOINTS = [
 
 USER_AGENT = (
     "Mozilla/5.0 (compatible; vpngate-monitor/1.0; "
-    "+https://github.com/onlyactions/vpngate-monitor) automated-daily-check"
+    "+https://github.com/g1010yzd10/vpngate-monitor) automated-6-hourly-check"
 )
 
 CSV_FIELDS = [
@@ -66,6 +66,8 @@ DEFAULTS = {
     "recall_days": 30,         # keep re-testing servers seen in the API within N days
     "registry_cap": 3000,      # hard cap on remembered servers
 }
+
+UPLOAD_BYTES = 524_288       # 512 KB pushed through the tunnel (upload test)
 
 # ---------------------------------------------------------------------- time
 
@@ -293,6 +295,100 @@ def country_flag(code: str) -> str:
     if len(code) == 2 and code.isalpha() and code.isascii():
         return "".join(chr(0x1F1E6 + ord(c) - 65) for c in code)
     return "🏳"
+
+
+# ---------------------------------------------------------------- naming ---
+#
+# Full-descriptor display name for a verified VPN Gate server, same template
+# family as the proxy-scanner node names:
+#
+#   🇩🇪 DE | Contabo AS141995 | ↓12.0 ↑1.2Mbps | 84.247.155.196 | DC·Clean
+#            ISP       AS       measured ↓/↑     verified exit   type·reputation
+
+LEGAL_SUFFIX_RE = re.compile(
+    r"(?i)[,\s]*(co\.,? ?ltd\.?|ltd[a-z]?\.?|llc|inc\.?|incorporated|gmbh|"
+    r"s\.?a\.?r\.?l\.?|sarl|s\.?p\.?a?\.?|srl|s\.?a\.?s\.?|a/s|ab|as|oyj|plc|"
+    r"pty\.?|pte\.?|b\.?v\.?|n\.?v\.?|s\.?a\.?|corp\.?|corporation|company|"
+    r"holding|holdings|group|limited|partners|llp|kft|ooo|zrt|s\.?d\.?n\.?bhd)"
+    r"[,\s]*\.?$")
+AS_RE = re.compile(r"(A[Ss]\d{1,10})")
+
+
+def short_isp(name, cap=22):
+    """Compact ISP label: drop legal suffixes, cap length without cutting
+    a word in half."""
+    if not name:
+        return ""
+    s = re.sub(r"\s+", " ", str(name)).strip(" .,-")
+    prev = None
+    while prev != s:
+        prev = s
+        s = LEGAL_SUFFIX_RE.sub("", s).strip(" .,-")
+    if len(s) > cap:
+        s = s[:cap]
+        if " " in s:
+            s = s.rsplit(" ", 1)[0]
+    return s
+
+
+def as_num(as_field):
+    """'AS141995 Contabo Asia Private Limited' -> 'AS141995'."""
+    m = AS_RE.search(str(as_field or ""))
+    return m.group(1) if m else ""
+
+
+def ip_type_tag(mobile, hosting):
+    if mobile is True:
+        return "MOB"
+    if hosting is True:
+        return "DC"
+    if hosting is False:
+        return "RES"
+    return "?"
+
+
+def clean_tag(proxy_flag):
+    if proxy_flag is True:
+        return "Flag"
+    if proxy_flag is False:
+        return "Clean"
+    return "?"
+
+
+def quality_tag(mobile, hosting, proxy_flag):
+    parts = [p for p in (ip_type_tag(mobile, hosting),
+                         clean_tag(proxy_flag)) if p != "?"]
+    return "·".join(parts) if parts else "?"
+
+
+def _fmt_m(mbps_value):
+    if mbps_value is None:
+        return "?"
+    try:
+        return f"{float(mbps_value):.1f}"
+    except (TypeError, ValueError):
+        return "?"
+
+
+def display_name(entry):
+    """Build the full-descriptor name for a merged server entry (dict with
+    CountryShort + nested 'test' dict as produced by report.render)."""
+    t = entry.get("test") or {}
+    cc = (t.get("exit_country") or entry.get("CountryShort") or "").upper()
+    route = f"{country_flag(cc)} {cc}" if len(cc) == 2 else "🏳 ??"
+    asn = as_num(t.get("exit_as"))
+    as_field = str(t.get("exit_as") or "")
+    org_from_as = as_field.split(" ", 1)[1].strip() if " " in as_field else ""
+    if org_from_as == asn:
+        org_from_as = ""
+    isp = short_isp(t.get("exit_isp") or t.get("exit_org") or org_from_as)
+    who = " ".join(x for x in (isp, asn) if x) or "??"
+    speed = (f"↓{_fmt_m(t.get('download_mbps'))} "
+             f"↑{_fmt_m(t.get('upload_mbps'))}Mbps")
+    ip = str(t.get("exit_ip") or "").strip() or "??"
+    quality = quality_tag(t.get("exit_mobile"), t.get("exit_hosting"),
+                          t.get("exit_proxy"))
+    return f"{route} | {who} | {speed} | {ip} | {quality}"
 
 
 def spark(series):

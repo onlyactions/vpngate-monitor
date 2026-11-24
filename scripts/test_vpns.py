@@ -11,8 +11,12 @@ This does NOT validate the CSV. For every server in the fetched list we:
   4. wait for a genuine "Initialization Sequence Completed",
   5. verify egress: an HTTPS request bound to the tunnel must report an exit
      IP different from the runner's own IP (and reveal the true exit country),
-  6. measure throughput: a 5 MB download through the same pinned route,
-  7. hard-kill the tunnel and clean up.
+  6. measure throughput: a 5 MB download AND a 512 KB upload through the same
+     pinned route (both directions of what a user would actually get),
+  7. after all tunnels: batch-lookup every verified exit IP at ip-api to add
+     the ISP, AS, city and IP-reputation flags (datacenter / mobile /
+     proxy-DB listing) that end up in the report and the display names,
+  8. hard-kill the tunnel and clean up.
 
 All servers are tested on every run -- not just the current API list, but
 the union of every server that has appeared in the API within the recall
@@ -35,6 +39,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -223,6 +228,74 @@ def speed_via_tunnel(tun, cf, args):
     return {"speed_error": (err or f"curl_rc_{rc}")[:100]}
 
 
+def upload_via_tunnel(tun, cf, args):
+    """512 KB POST to speed.cloudflare.com/__up through the pinned tunnel —
+    measures the upload direction a user would actually get."""
+    payload = os.path.join(TMP_ROOT, "upload.bin")
+    if not os.path.exists(payload):
+        with open(payload, "wb") as f:
+            f.write(os.urandom(common.UPLOAD_BYTES))
+    rc, out, err = run_curl(
+        ["--max-time", str(args.speed_timeout), "--interface", tun,
+         "--resolve", f"speed.cloudflare.com:443:{cf}",
+         "-o", "/dev/null", "-X", "POST", "--data-binary", f"@{payload}",
+         "-H", "Content-Type: application/octet-stream",
+         "-w", "%{size_upload} %{speed_upload}"],
+        args.speed_timeout + 8)
+    parts = out.split()
+    if len(parts) == 2:
+        try:
+            size, spd = float(parts[0]), float(parts[1])
+            if size > 100_000 and spd > 0:
+                return {"upload_mbps": round(spd * 8 / 1e6, 2)}
+        except ValueError:
+            pass
+    return {"upload_error": (err or f"curl_rc_{rc}")[:100]}
+
+
+IPAPI_BATCH_URL = ("http://ip-api.com/batch?fields=status,query,countryCode,"
+                   "city,isp,org,as,mobile,proxy,hosting")
+
+
+def enrich_with_ipapi(results, log=plog):
+    """Attach ISP / AS / city / reputation of every VERIFIED exit IP.
+
+    Uses ip-api's free batch endpoint (100 IPs per request, 15 req/min).
+    Runs direct from the runner (not through the tunnels): the exit identity
+    itself was already verified per-tunnel via Cloudflare's trace endpoint.
+    """
+    ips = sorted({r.get("exit_ip") for r in results
+                  if r.get("alive") and r.get("exit_ip")})
+    if not ips:
+        return
+    log(f"ip-api batch lookup for {len(ips)} verified exit IPs")
+    info = {}
+    for i in range(0, len(ips), 100):
+        chunk = ips[i:i + 100]
+        try:
+            req = urllib.request.Request(
+                IPAPI_BATCH_URL, data=json.dumps(chunk).encode(),
+                headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                for row in json.loads(resp.read().decode()):
+                    if row.get("status") == "success":
+                        info[row.get("query", "")] = row
+        except Exception as e:  # noqa: BLE001
+            log(f"WARN ip-api batch failed: {e}")
+        if i + 100 < len(ips):
+            time.sleep(4.5)          # free tier: 15 batch requests / minute
+    for r in results:
+        row = info.get(r.get("exit_ip"))
+        if row:
+            r.update(exit_isp=row.get("isp", ""),
+                     exit_org=row.get("org", ""),
+                     exit_as=row.get("as", ""),
+                     exit_city=row.get("city", ""),
+                     exit_mobile=row.get("mobile"),
+                     exit_proxy=row.get("proxy"),
+                     exit_hosting=row.get("hosting"))
+
+
 def get_runner_ip():
     rc, out, _ = run_curl(["--max-time", "10",
                            "https://www.cloudflare.com/cdn-cgi/trace"], 15)
@@ -289,6 +362,8 @@ def test_server(s, worker, runner_ip, args, ov_ver, template):
             base["geo_match"] = (trace["loc"] ==
                                  (s.get("CountryShort") or "").strip().upper())
             base.update(speed_via_tunnel(tun, trace["cf"], args))
+            if base.get("download_mbps"):
+                base.update(upload_via_tunnel(tun, trace["cf"], args))
             return base
         finally:
             kill_proc(proc)
@@ -448,6 +523,13 @@ def main() -> int:
 
     totals = flush_results(out_path, None, args, runner_ip, partial=False)
 
+    # attach ISP / AS / reputation of every verified exit IP (batch, direct)
+    try:
+        enrich_with_ipapi(RESULTS)
+        totals = flush_results(out_path, None, args, runner_ip, partial=False)
+    except Exception as e:  # noqa: BLE001
+        plog(f"WARN ip-api enrichment failed: {e}")
+
     # hand ownership of outputs back to the invoking user when run via sudo
     sudo_uid = os.environ.get("SUDO_UID")
     if sudo_uid and sudo_uid.isdigit():
@@ -477,6 +559,10 @@ def main() -> int:
         mid = speeds[len(speeds) // 2]
         plog(f"speed of alive servers: avg {sum(speeds) / len(speeds):.1f} "
              f"median {mid:.1f} max {speeds[-1]:.1f} Mbps")
+    ups = sorted((r.get("upload_mbps") or 0) for r in alive if r.get("upload_mbps"))
+    if ups:
+        plog(f"upload of alive servers: avg {sum(ups) / len(ups):.1f} "
+             f"median {ups[len(ups) // 2]:.1f} max {ups[-1]:.1f} Mbps")
     if err_breakdown:
         top = ", ".join(f"{k}={v}" for k, v in
                         err_breakdown.most_common(8))

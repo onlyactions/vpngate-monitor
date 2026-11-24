@@ -135,8 +135,13 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
         t = by_key.get((entry["HostName"], entry["IP"]))
         entry["test"] = ({k: t.get(k) for k in (
             "alive", "connect_ms", "via", "proto", "exit_ip", "exit_country",
-            "geo_match", "http_s", "download_mbps", "downloaded_bytes",
-            "speed_capped", "error")} if t else None)
+            "geo_match", "http_s", "download_mbps", "upload_mbps",
+            "downloaded_bytes", "speed_capped", "error",
+            "exit_isp", "exit_org", "exit_as", "exit_city",
+            "exit_mobile", "exit_proxy", "exit_hosting")}
+         if t else None)
+        if entry["test"] and entry["test"].get("alive"):
+            entry["display_name"] = common.display_name(entry)
 
     current = [e for e in merged if e["in_current_list"]]
     tested = [e for e in merged if e["test"]]
@@ -154,6 +159,13 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
     avg_sp = sum(speeds) / len(speeds) if speeds else None
     med_sp = median(speeds) if speeds else None
     max_sp = max(speeds) if speeds else None
+    ups = [e["test"]["upload_mbps"] for e in alive
+           if e["test"].get("upload_mbps")]
+    avg_up = sum(ups) / len(ups) if ups else None
+    max_up = max(ups) if ups else None
+    clean_n = sum(1 for e in alive if e["test"].get("exit_proxy") is False)
+    res_n = sum(1 for e in alive if e["test"].get("exit_hosting") is False)
+    mob_n = sum(1 for e in alive if e["test"].get("exit_mobile") is True)
     mismatches = [e for e in alive if e["test"].get("geo_match") is False]
     conns = [e["test"]["connect_ms"] for e in alive if e["test"].get("connect_ms")]
 
@@ -198,9 +210,15 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
                        (f"{len(alive):,}/{len(tested):,} tested ({alive_pct:.0f}%)"
                         if tested else "pending"),
                        alive_color(alive_pct if tested else None)),
-        "speed": badge("avg measured speed",
+        "speed": badge("avg measured ↓",
                        (f"{avg_sp:.1f} Mbps" if avg_sp is not None else "pending"),
                        speed_color(avg_sp)),
+        "up-speed": badge("avg measured ↑",
+                          (f"{avg_up:.1f} Mbps" if avg_up is not None else "pending"),
+                          speed_color(avg_up)),
+        "clean": badge("clean exits",
+                       (f"{clean_n:,} unflagged" if tested else "pending"),
+                       "green" if clean_n else "lightgrey"),
         "updated": badge("last run",
                          common.iso_to_human(meta.get("fetched_at")) if meta
                          else "pending",
@@ -213,12 +231,13 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
 
     ap("# 🛡️ VPN Gate Monitor")
     ap("")
-    ap("> **Once a day** this repo fetches the complete public "
+    ap("> **Daily** this repo fetches the complete public "
        "[VPN Gate](https://www.vpngate.net/en/) server list, **cleans, "
        "deduplicates and archives** it — and then does the part that matters: "
        "it **opens a real OpenVPN tunnel to every single listed server**, "
        "verifies that traffic genuinely exits through it, checks *where* it "
-       "exits, and measures real download throughput.")
+       "exits and **who operates that exit** (ISP, AS, IP reputation), and "
+       "measures real download **and upload** throughput.")
     ap(">")
     ap("> **Everything below this line is the auto-generated living report. "
        "No hand-edited numbers.**")
@@ -226,7 +245,7 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
     wl = f"{repo}/actions/workflows/vpngate.yml"
     ap(f"[![pipeline](https://github.com/{wl}/badge.svg)]"
        f"(https://github.com/{wl})")
-    for name in ("servers", "alive", "speed", "updated"):
+    for name in ("servers", "alive", "speed", "up-speed", "clean", "updated"):
         b = badges[name]
         url = quote(f"{raw_base}/badges/{name}.json", safe="")
         ap(f"[![{b['label']}](https://img.shields.io/endpoint?url={url})"
@@ -269,8 +288,14 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
                 ap(f"| **Usability** | **{usability:.1f}%** of everything "
                    f"VPN Gate lists right now actually works |")
             if avg_sp is not None:
-                ap(f"| **⚡ Measured speed (avg / median / max)** | "
+                ap(f"| **⚡ Measured download (avg / median / max)** | "
                    f"**{avg_sp:.1f} / {med_sp:.1f} / {max_sp:.1f} Mbps** |")
+            if avg_up is not None:
+                ap(f"| **⚡ Measured upload (avg / max)** | "
+                   f"**{avg_up:.1f} / {max_up:.1f} Mbps** |")
+            ap(f"| **🧼 Exit IP reputation** | **{clean_n:,}** unflagged "
+               f"('clean') · **{res_n:,}** residential · **{mob_n:,}** mobile · "
+               f"rest datacenter/flagged |")
             if fastest:
                 f0 = fastest[0]
                 ap(f"| **🚀 Fastest verified** | **{esc(f0.get('HostName'))}** · "
@@ -290,29 +315,73 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
     ap("## 🚀 Fastest verified servers")
     ap("")
     if fastest:
-        ap("| # | Server | Country | List | Endpoint | Handshake | Measured ↓ | "
-           "Claimed ↓ | Score |")
-        ap("|---:|---|---|---|---|---:|---:|---:|---:|")
+        ap("Each row is fully described by its display name (see "
+           "[How to read the names](#-how-to-read-the-names) below): country, "
+           "ISP + AS of the **verified exit IP**, measured download/upload "
+           "speed, the exit IP itself and its reputation.")
+        ap("")
+        ap("```text")
+        for i, e in enumerate(fastest, 1):
+            ap(f"{i}. {e.get('display_name', common.display_name(e))}  "
+               f"({esc(e.get('HostName'))})")
+        ap("```")
+        ap("")
+        ap("| # | Server | Country | Endpoint | Exit IP (verified) | "
+           "ISP · AS · rep | Measured ↓ | Measured ↑ | Claimed ↓ | Score |")
+        ap("|---:|---|---|---|---|---|---:|---:|---:|---:|")
         for i, e in enumerate(fastest, 1):
             t = e["test"]
+            up = f"{t.get('upload_mbps'):.1f} Mbps" if t.get("upload_mbps") \
+                else "-"
             ap(f"| {i} | `{esc(e.get('HostName'))}` | "
                f"{common.country_flag(e.get('CountryShort'))} "
-               f"{esc(e.get('CountryLong'))} | "
-               f"{'📋 current' if e.get('in_current_list') else '♻️ historical'} | "
+               f"{esc(e.get('CountryShort'))} | "
                f"`{esc(t.get('via') or e.get('IP'))}`"
                f"{'/' + esc(t.get('proto')) if t.get('proto') else ''} | "
-               f"{(t.get('connect_ms') or 0) / 1000:.1f}s | "
+               f"`{esc(t.get('exit_ip'))}` | "
+               f"{esc(common.short_isp(t.get('exit_isp') or t.get('exit_org')))} "
+               f"{common.as_num(t.get('exit_as'))} "
+               f"{common.quality_tag(t.get('exit_mobile'), t.get('exit_hosting'), t.get('exit_proxy'))} | "
                f"**{t.get('download_mbps') or 0:.1f} Mbps** | "
+               f"{up} | "
                f"{common.mbps(e.get('Speed'))} Mbps | {e.get('Score', 0):,} |")
         ap("")
-        ap("*Measured = 5 MB download through the live tunnel to "
-           "speed.cloudflare.com. Claimed = the server's self-reported line "
-           "speed in the VPN Gate API. 'Historical' servers are no longer in "
-           "the API's current top list but still answered our tunnel — we "
-           "keep re-testing everything we have ever seen.*")
+        ap("*Measured = 5 MB download + 512 KB upload through the live tunnel "
+           "to speed.cloudflare.com. Claimed = the server's self-reported line "
+           "speed in the VPN Gate API. Exit IP/ISP/reputation are looked up "
+           "from ip-api after the tunnels close. 'Historical' servers are no "
+           "longer in the API's current top list but still answered our "
+           "tunnel — we keep re-testing everything we have ever seen.*")
     else:
         ap("⏳ No verified-alive servers yet — waiting for the first "
            "completed test run.")
+    ap("")
+
+    # how to read the names ------------------------------------------------
+    ap("## 🏷️ How to read the names")
+    ap("")
+    ap("Every verified server gets a display name that tells you everything "
+       "about **what you would actually connect to**:")
+    ap("")
+    ap("```text")
+    ap("\U0001F1E9\U0001F1EA DE | Contabo AS141995 | ↓12.0 ↑1.2Mbps | 84.247.155.196 | DC·Clean")
+    ap("```")
+    ap("")
+    ap("| part | meaning |")
+    ap("|------|---------|")
+    ap("| `\U0001F1E9\U0001F1EA DE` | country of the **verified exit** (not what "
+       "the server claims) |")
+    ap("| `Contabo AS141995` | ISP / organization operating the exit IP and its "
+       "autonomous system |")
+    ap("| `↓12.0 ↑1.2Mbps` | download / upload measured through the live "
+       "tunnel (`?` = test failed) |")
+    ap("| `84.247.155.196` | the verified exit IP — your egress address |")
+    ap("| `DC` | datacenter / hosting IP (most VPN Gate servers) |")
+    ap("| `RES` | residential IP — usually the best bet against bot/VPN "
+       "blocks |")
+    ap("| `MOB` | mobile / carrier IP (CGNAT) |")
+    ap("| `Clean` | exit not listed in ip-api's proxy/VPN/Tor database |")
+    ap("| `Flag` | exit listed as proxy/VPN — expect streaming blocks |")
     ap("")
 
     # top score -----------------------------------------------------------------
@@ -320,15 +389,17 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
     ap("")
     if topscore:
         ap("| # | Server | Country | Score | Claimed ↓ | Measured ↓ | "
-           "Sessions | Uptime | Log policy |")
-        ap("|---:|---|---|---:|---:|---:|---:|---:|---|")
+           "Measured ↑ | Sessions | Uptime | Log policy |")
+        ap("|---:|---|---|---:|---:|---:|---:|---:|---:|---|")
         for i, e in enumerate(topscore, 1):
             t = e["test"]
+            up = f"{t.get('upload_mbps'):.1f}" if t.get("upload_mbps") else "-"
             ap(f"| {i} | `{esc(e.get('HostName'))}` | "
                f"{common.country_flag(e.get('CountryShort'))} "
                f"{esc(e.get('CountryShort'))} | {e.get('Score', 0):,} | "
                f"{common.mbps(e.get('Speed'))} Mbps | "
                f"{t.get('download_mbps') or 0:.1f} Mbps | "
+               f"{up} Mbps | "
                f"{e.get('NumVpnSessions', 0):,} | "
                f"{common.fmt_uptime(e.get('Uptime'))} | "
                f"{esc(e.get('LogType'))} |")
@@ -417,13 +488,15 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
         ap("")
         ap(f"Avg measured speed (Mbps): `{common.spark(speed_series)}`")
         ap("")
-        ap("| Run at | Fetched | Alive | Alive % | Avg ↓ | Max ↓ | Mismatches |")
-        ap("|---|---:|---:|---:|---:|---:|---:|")
+        ap("| Run at | Fetched | Alive | Alive % | Avg ↓ | Max ↓ | Avg ↑ | "
+           "Mismatches |")
+        ap("|---|---:|---:|---:|---:|---:|---:|---:|")
         for h in reversed(history[-15:]):
             ap(f"| {common.iso_to_human(h.get('time'))} | "
                f"{h.get('fetched', 0):,} | {h.get('alive', 0):,} | "
                f"{h.get('alive_pct', 0):.0f}% | "
                f"{h.get('avg_mbps') or 0:.1f} | {h.get('max_mbps') or 0:.1f} | "
+               f"{h.get('avg_up_mbps') or 0:.1f} | "
                f"{h.get('mismatches', 0)} |")
     else:
         ap("History builds up here run by run "
@@ -466,10 +539,14 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
        "two /32 routes through the tunnel to per-worker Cloudflare anycast "
        "IPs, wait for *Initialization Sequence Completed*, then verify egress "
        "(`cdn-cgi/trace` through the tunnel must return a foreign exit IP + "
-       "real exit country) and measure a 5 MB download through the same "
-       "tunnel. Up to 48 isolated tunnels run in parallel; a server that "
-       "never completes the handshake is hard-killed after 25 s.")
-    ap("6. **Report** — this README, four live badges, `latest.json`, "
+       "real exit country), measure a 5 MB download and a 512 KB upload "
+       "through the same tunnel, and — once all tunnels are down — batch-"
+       "lookup every verified exit IP at ip-api to add the ISP, AS and IP-"
+       "reputation flags (datacenter / residential / mobile / proxy-DB) "
+       "that you see in the display names. Up to 48 isolated tunnels run in "
+       "parallel; a server that never completes the handshake is hard-killed "
+       "after 25 s.")
+    ap("6. **Report** — this README, six live badges, `latest.json`, "
        "`summary.json` and the `history.jsonl` log are regenerated and "
        "committed by `github-actions[bot]`.")
     ap("")
@@ -506,7 +583,9 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
     ap("")
     ap("Field units: `Score` points · `Ping` ms · `Speed` bit/s (self-"
        "reported) · `Uptime` ms · `TotalUsers` count · `TotalTraffic` bytes "
-       "· `download_mbps` Mbps (measured through the tunnel).")
+       "· `download_mbps` / `upload_mbps` Mbps (measured through the "
+       "tunnel) · `exit_*` = ISP/AS/city/reputation of the verified exit "
+       "IP · `display_name` = the full-descriptor name.")
     ap("")
 
     # methodology -----------------------------------------------------------------------------
@@ -519,8 +598,9 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
     ap("- **No DNS through the VPN.** Test destinations are pinned with "
        "`curl --resolve` to per-worker Cloudflare anycast addresses, so a "
        "broken/hijacking VPN DNS can never fake a success.")
-    ap("- **Throughput** is one 5 MB download to `speed.cloudflare.com` "
-       "through the live tunnel — a sample, not a lab measurement.")
+    ap("- **Throughput** is one 5 MB download plus one 512 KB upload to "
+       "`speed.cloudflare.com` through the live tunnel — a sample, not a "
+       "lab measurement.")
     ap("- **Vantage point**: GitHub Actions runners (Azure, usually US/EU). "
        "A server that is slow from there may be fast from your country, and "
        "vice versa.")
@@ -552,7 +632,7 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
         ap("---")
         ap(f"*Auto-generated by [run #{run_no}]({run_url}) at "
            f"{common.now_iso().replace('T', ' ').replace('Z', ' UTC')}. "
-           f"Next scheduled run: daily at 03:23 UTC.*")
+           f"Next scheduled run: daily 03:23 UTC.*")
         ap("")
 
     return "\n".join(L).rstrip() + "\n", badges, merged, {
@@ -560,6 +640,10 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
         "alive": len(alive), "dead": len(dead), "untested": untested,
         "alive_pct": alive_pct, "usability": usability,
         "avg_mbps": avg_sp, "median_mbps": med_sp, "max_mbps": max_sp,
+        "avg_up_mbps": (round(avg_up, 2) if avg_up is not None else None),
+        "max_up_mbps": max_up,
+        "clean_exits": clean_n, "residential_exits": res_n,
+        "mobile_exits": mob_n,
         "mismatches": len(mismatches),
         "historical_known": hist_known,
         "revived": len(revived),
@@ -567,7 +651,9 @@ def render(readme_path, repo, meta, results_doc, servers, registry, history):
         "fastest": [{"HostName": e.get("HostName"), "IP": e.get("IP"),
                      "CountryShort": e.get("CountryShort"),
                      "in_current_list": e.get("in_current_list"),
-                     "download_mbps": e["test"].get("download_mbps")}
+                     "download_mbps": e["test"].get("download_mbps"),
+                     "upload_mbps": e["test"].get("upload_mbps"),
+                     "display_name": e.get("display_name")}
                     for e in fastest],
         "failure_breakdown": dict(fails.most_common(12)),
         "runner_ip": tmeta.get("runner_ip"),
@@ -621,6 +707,8 @@ def main() -> int:
             "alive_pct": round(s["alive_pct"], 1) if s["alive_pct"] is not None else None,
             "avg_mbps": round(s["avg_mbps"], 2) if s["avg_mbps"] is not None else None,
             "max_mbps": s["max_mbps"],
+            "avg_up_mbps": s.get("avg_up_mbps"),
+            "clean_exits": s.get("clean_exits"),
             "mismatches": s["mismatches"],
             "revived": s.get("revived", 0),
             "run": s["run"],
@@ -649,8 +737,15 @@ def main() -> int:
             else:
                 f.write(f"- Real-tested {s['tested']:,}\n")
             if s["avg_mbps"] is not None:
-                f.write(f"- Avg measured speed **{s['avg_mbps']:.1f} Mbps**, "
-                        f"max **{s['max_mbps']:.1f} Mbps**\n")
+                f.write(f"- Avg measured speed **{s['avg_mbps']:.1f} Mbps** "
+                        f"down, max **{s['max_mbps']:.1f} Mbps**")
+                if s.get("avg_up_mbps") is not None:
+                    f.write(f"; avg upload **{s['avg_up_mbps']:.1f} Mbps**")
+                f.write("\n")
+            if s.get("clean_exits"):
+                f.write(f"- Clean (unflagged) exits: **{s['clean_exits']:,}**, "
+                        f"residential: **{s.get('residential_exits', 0):,}**, "
+                        f"mobile: **{s.get('mobile_exits', 0):,}**\n")
             f.write(f"- Exit-country mismatches: {s['mismatches']}\n")
             if s["fastest"]:
                 f0 = s["fastest"][0]

@@ -230,3 +230,44 @@ def test_public_csv_has_endpoint_columns(tmp_path):
     text = p.read_text()
     assert text.splitlines()[0].endswith("Proto,Port")
     assert text.splitlines()[1].endswith(",tcp,443")
+
+
+# ---------------------------------------------------------------- naming ---
+
+def test_short_isp_and_as_num():
+    assert common.short_isp("DigitalOcean, LLC") == "DigitalOcean"
+    assert common.short_isp("Contabo Asia Private Limited") == "Contabo Asia Private"
+    assert common.short_isp("Alibaba (US) Technology Co., Ltd.") == "Alibaba (US)"
+    assert common.short_isp("") == ""
+    assert common.as_num("AS141995 Contabo Asia Private Limited") == "AS141995"
+    assert common.as_num("") == ""
+
+
+def test_quality_tags():
+    assert common.ip_type_tag(True, True) == "MOB"
+    assert common.ip_type_tag(False, False) == "RES"
+    assert common.ip_type_tag(False, True) == "DC"
+    assert common.ip_type_tag(None, None) == "?"
+    assert common.clean_tag(False) == "Clean"
+    assert common.clean_tag(True) == "Flag"
+    assert common.clean_tag(None) == "?"
+    assert common.quality_tag(False, True, False) == "DC\u00b7Clean"
+    assert common.quality_tag(True, True, True) == "MOB\u00b7Flag"
+    assert common.quality_tag(None, None, None) == "?"
+
+
+def test_display_name():
+    e = {"CountryShort": "DE", "test": {
+        "alive": True, "exit_country": "DE", "exit_ip": "84.247.155.196",
+        "exit_as": "AS141995 Contabo Asia Private Limited",
+        "exit_isp": "Contabo Asia Private Limited",
+        "exit_hosting": True, "exit_proxy": False,
+        "download_mbps": 12.0, "upload_mbps": 1.2}}
+    n = common.display_name(e)
+    assert n == "\U0001F1E9\U0001F1EA DE | Contabo Asia Private AS141995 | \u219312.0 \u21911.2Mbps | 84.247.155.196 | DC\u00b7Clean"
+    # graceful degradation when ISP/flags unknown
+    e2 = {"CountryShort": "JP", "test": {"alive": True, "exit_country": "JP",
+                                         "exit_ip": "1.2.3.4",
+                                         "download_mbps": 5.5}}
+    n2 = common.display_name(e2)
+    assert "\u2191?Mbps" in n2 and n2.endswith("| ?") and "??" in n2
