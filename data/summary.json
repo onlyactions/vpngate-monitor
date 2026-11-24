@@ -1,120 +1,145 @@
 {
  "meta": {
-  "fetched_at": "2026-11-24T04:29:47Z",
+  "fetched_at": "2026-11-24T14:29:24Z",
   "source": "https://www.vpngate.net/api/iphone/",
   "http_status": 200,
-  "raw_bytes": 1226104,
-  "sha256": "4c0a4ceb95509adfb5be0174500b43822245fe38d3cab1c44b8ed637ba92cc4c",
+  "raw_bytes": 1306888,
+  "sha256": "856103469ca9017ff643ecec93539b9e1a547d58f3e0698052b42f28b0de7dfc",
   "duration_s": 1.8,
-  "rows_parsed": 91,
+  "rows_parsed": 97,
   "rows_malformed": 0,
-  "rows_cleaned": 87,
-  "rows_dropped_invalid": 4,
+  "rows_cleaned": 96,
+  "rows_dropped_invalid": 1,
   "removed_exact_duplicates": 0,
-  "removed_same_ip_duplicates": 0,
-  "unique_servers": 87,
-  "with_endpoint": 87,
-  "registry_size": 1383,
-  "test_plan_size": 1383,
-  "test_plan_current": 87,
+  "removed_same_ip_duplicates": 2,
+  "unique_servers": 94,
+  "with_endpoint": 94,
+  "registry_size": 1448,
+  "test_plan_size": 1448,
+  "test_plan_current": 94,
   "recall_days": 30
  },
- "fetched": 87,
- "tested": 1383,
- "alive": 452,
- "dead": 931,
+ "fetched": 94,
+ "tested": 1448,
+ "alive": 505,
+ "dead": 943,
  "untested": 0,
- "alive_pct": 32.682574114244396,
- "usability": 41.37931034482759,
- "avg_mbps": 12.086503340757238,
- "median_mbps": 13.35,
- "max_mbps": 39.66,
+ "alive_pct": 34.8756906077348,
+ "usability": 68.08510638297872,
+ "avg_mbps": 13.201527777777777,
+ "median_mbps": 14.65,
+ "max_mbps": 31.66,
+ "avg_up_mbps": null,
+ "max_up_mbps": null,
+ "clean_exits": 147,
+ "residential_exits": 503,
+ "mobile_exits": 7,
  "mismatches": 1,
- "historical_known": 1296,
- "revived": 416,
- "avg_connect_ms": 2763.7964601769913,
+ "historical_known": 1354,
+ "revived": 441,
+ "avg_connect_ms": 3149.4732673267326,
  "fastest": [
   {
-   "HostName": "vpn491348575",
-   "IP": "184.68.30.116",
-   "CountryShort": "CA",
-   "in_current_list": false,
-   "download_mbps": 39.66
-  },
-  {
-   "HostName": "vpn156777673",
-   "IP": "189.217.22.155",
-   "CountryShort": "MX",
-   "in_current_list": false,
-   "download_mbps": 30.89
-  },
-  {
-   "HostName": "vpn189019752",
-   "IP": "131.147.36.66",
+   "HostName": "vpn482888807",
+   "IP": "223.132.1.215",
    "CountryShort": "JP",
    "in_current_list": false,
-   "download_mbps": 29.2
-  },
-  {
-   "HostName": "vpn679218486",
-   "IP": "124.209.226.195",
-   "CountryShort": "JP",
-   "in_current_list": false,
-   "download_mbps": 28.96
+   "download_mbps": 31.66,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | Sony Network AS2527 | ↓31.7 ↑?Mbps | 223.132.1.215 | RES·Flag"
   },
   {
    "HostName": "vpn167234104",
    "IP": "39.111.221.149",
    "CountryShort": "JP",
    "in_current_list": false,
-   "download_mbps": 28.11
+   "download_mbps": 30.67,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | Sony Network AS2527 | ↓30.7 ↑?Mbps | 39.111.221.149 | RES·Flag"
   },
   {
-   "HostName": "vpn316528831",
-   "IP": "183.104.124.77",
-   "CountryShort": "KR",
+   "HostName": "vpn367633262",
+   "IP": "138.64.87.141",
+   "CountryShort": "JP",
    "in_current_list": false,
-   "download_mbps": 27.25
+   "download_mbps": 30.13,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | ASAHI Net AS4685 | ↓30.1 ↑?Mbps | 138.64.87.141 | RES·Flag"
+  },
+  {
+   "HostName": "vpn649976307",
+   "IP": "163.58.83.64",
+   "CountryShort": "JP",
+   "in_current_list": false,
+   "download_mbps": 29.5,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | its communications AS9365 | ↓29.5 ↑?Mbps | 163.58.83.64 | RES·Flag"
+  },
+  {
+   "HostName": "vpn575184406",
+   "IP": "110.233.241.249",
+   "CountryShort": "JP",
+   "in_current_list": true,
+   "download_mbps": 29.48,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | BIGLOBE AS2518 | ↓29.5 ↑?Mbps | 110.233.241.249 | RES·Clean"
+  },
+  {
+   "HostName": "vpn630509601",
+   "IP": "118.240.3.52",
+   "CountryShort": "JP",
+   "in_current_list": false,
+   "download_mbps": 29.16,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | Sony Network AS2527 | ↓29.2 ↑?Mbps | 118.240.3.52 | RES·Flag"
   },
   {
    "HostName": "vpn831230332",
    "IP": "147.192.140.77",
    "CountryShort": "JP",
    "in_current_list": false,
-   "download_mbps": 27.01
+   "download_mbps": 29.1,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | Sony Network AS2527 | ↓29.1 ↑?Mbps | 147.192.140.77 | RES·Flag"
   },
   {
    "HostName": "vpn909153861",
    "IP": "138.64.96.118",
    "CountryShort": "JP",
    "in_current_list": false,
-   "download_mbps": 26.99
+   "download_mbps": 27.6,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | ASAHI Net AS4685 | ↓27.6 ↑?Mbps | 138.64.96.118 | RES·Flag"
   },
   {
-   "HostName": "vpn537511968",
-   "IP": "133.32.133.240",
+   "HostName": "vpn849985359",
+   "IP": "175.132.127.244",
    "CountryShort": "JP",
    "in_current_list": false,
-   "download_mbps": 26.67
+   "download_mbps": 27.41,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | Kddi AS2516 | ↓27.4 ↑?Mbps | 175.132.127.244 | RES·Flag"
   },
   {
-   "HostName": "vpn980553333",
-   "IP": "220.125.128.62",
-   "CountryShort": "KR",
-   "in_current_list": true,
-   "download_mbps": 26.65
+   "HostName": "vpn860695669",
+   "IP": "113.213.196.228",
+   "CountryShort": "JP",
+   "in_current_list": false,
+   "download_mbps": 25.71,
+   "upload_mbps": null,
+   "display_name": "🇯🇵 JP | NCV AS59127 | ↓25.7 ↑?Mbps | 113.213.196.228 | RES·Clean"
   }
  ],
  "failure_breakdown": {
-  "connect_timeout": 767,
-  "auth_failed": 152,
-  "egress_verification_failed": 12
+  "connect_timeout": 794,
+  "auth_failed": 139,
+  "egress_verification_failed": 10
  },
- "runner_ip": "3.42.157.141",
+ "runner_ip": "13.71.227.129",
  "run": {
-  "number": "19",
-  "url": "https://github.com/onlyactions/vpngate-monitor/actions/runs/45326455346",
-  "event": "schedule",
-  "generated_at": "2026-11-24T04:38:34Z"
+  "number": "20",
+  "url": "https://github.com/onlyactions/vpngate-monitor/actions/runs/45414584494",
+  "event": "push",
+  "generated_at": "2026-11-24T14:38:49Z"
  }
 }
