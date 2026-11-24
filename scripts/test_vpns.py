@@ -240,7 +240,8 @@ def upload_via_tunnel(tun, cf, args):
          "--resolve", f"speed.cloudflare.com:443:{cf}",
          "-o", "/dev/null", "-X", "POST", "--data-binary", f"@{payload}",
          "-H", "Content-Type: application/octet-stream",
-         "-w", "%{size_upload} %{speed_upload}"],
+         "-w", "%{size_upload} %{speed_upload}",
+         "https://speed.cloudflare.com/__up"],
         args.speed_timeout + 8)
     parts = out.split()
     if len(parts) == 2:
